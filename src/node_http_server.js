@@ -4,7 +4,6 @@
 //  Copyright (c) 2018 Nodemedia. All rights reserved.
 //
 
-
 const Fs = require('fs');
 const path = require('path');
 const Http = require('http');
@@ -37,7 +36,10 @@ class NodeHttpServer {
 
     app.all('*', (req, res, next) => {
       res.header('Access-Control-Allow-Origin', this.config.http.allow_origin);
-      res.header('Access-Control-Allow-Headers', 'Content-Type,Content-Length, Authorization, Accept,X-Requested-With');
+      res.header(
+        'Access-Control-Allow-Headers',
+        'Content-Type,Content-Length, Authorization, Accept,X-Requested-With'
+      );
       res.header('Access-Control-Allow-Methods', 'PUT,POST,GET,DELETE,OPTIONS');
       res.header('Access-Control-Allow-Credentials', true);
       req.method === 'OPTIONS' ? res.sendStatus(200) : next();
@@ -57,7 +59,10 @@ class NodeHttpServer {
 
     if (this.config.http.api !== false) {
       if (this.config.auth && this.config.auth.api) {
-        app.use(['/api/*', '/static/*', '/admin/*'], basicAuth(this.config.auth.api_user, this.config.auth.api_pass));
+        app.use(
+          ['/api/*', '/static/*', '/admin/*'],
+          basicAuth(this.config.auth.api_user, this.config.auth.api_pass)
+        );
       }
       app.use('/api/streams', streamsRoute(context));
       app.use('/api/server', serverRoute(context));
@@ -65,7 +70,23 @@ class NodeHttpServer {
     }
 
     app.use(Express.static(path.join(__dirname + '/public')));
+
+    // call auth callback before granting access to hls output
+    app.get('*.m3u8', async (req, res, next) => {
+      console.log('attempt meu8');
+      try {
+        if (!config.transAuthCallback || (await config.transAuthCallback())) {
+          return next();
+        }
+      } catch (err) {
+        console.log('Trans auth error!!', err);
+      }
+
+      res.status(401).json({ err: 'unauthorized' });
+    });
+
     app.use(Express.static(this.mediaroot));
+
     if (config.http.webroot) {
       app.use(Express.static(config.http.webroot));
     }
@@ -80,7 +101,7 @@ class NodeHttpServer {
     if (this.config.https) {
       let options = {
         key: Fs.readFileSync(this.config.https.key),
-        cert: Fs.readFileSync(this.config.https.cert)
+        cert: Fs.readFileSync(this.config.https.cert),
       };
       this.sport = config.https.port ? config.https.port : HTTPS_PORT;
       this.httpsServer = Https.createServer(options, app);
@@ -135,7 +156,9 @@ class NodeHttpServer {
       });
 
       this.wssServer.on('listening', () => {
-        Logger.log(`Node Media WebSocketSecure Server started on port: ${this.sport}`);
+        Logger.log(
+          `Node Media WebSocketSecure Server started on port: ${this.sport}`
+        );
       });
       this.wssServer.on('error', (e) => {
         Logger.error(`Node Media WebSocketSecure Server ${e}`);
@@ -152,7 +175,8 @@ class NodeHttpServer {
 
     context.nodeEvent.on('doneConnect', (id, args) => {
       let session = context.sessions.get(id);
-      let socket = session instanceof NodeFlvSession ? session.req.socket : session.socket;
+      let socket =
+        session instanceof NodeFlvSession ? session.req.socket : session.socket;
       context.stat.inbytes += socket.bytesRead;
       context.stat.outbytes += socket.bytesWritten;
     });
@@ -174,7 +198,6 @@ class NodeHttpServer {
   onConnect(req, res) {
     let session = new NodeFlvSession(this.config, req, res);
     session.run();
-
   }
 }
 
